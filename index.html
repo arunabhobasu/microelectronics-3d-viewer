@@ -1,0 +1,1683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Microelectronics 3D Structure Viewer — EEE5400/EEE4329</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Sora:wght@300;400;600;700&display=swap');
+
+:root {
+  --bg:      #0a0f1e;
+  --surface: #0d1530;
+  --panel:   #111e3a;
+  --border:  #1c2f55;
+  --orange:  #c8682a;
+  --orange2: #b85c22;
+  --white:   #f0f4ff;
+  --text:    #dde6ff;
+  --muted:   #4a6899;
+  --mono: 'Space Mono', monospace;
+  --sans: 'Sora', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--sans); }
+
+/* ── LANDING ── */
+#landing {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+/* PCB-inspired background */
+.landing-bg {
+  position: fixed; inset: 0; pointer-events: none; overflow: hidden;
+}
+.landing-bg svg { width: 100%; height: 100%; }
+
+.landing-inner {
+  position: relative; z-index: 1;
+  max-width: 1100px; margin: 0 auto;
+  padding: 52px 40px 80px;
+  min-height: 100%;
+  display: flex; flex-direction: column;
+}
+
+/* Top bar */
+.landing-topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 52px;
+}
+.landing-topbar-left {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  letter-spacing: 0.14em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 10px;
+}
+.landing-topbar-left::before { content:''; width: 28px; height: 1px; background: var(--muted); }
+.landing-topbar-right {
+  font-family: var(--mono); font-size: 11px; color: var(--orange);
+  letter-spacing: 0.08em;
+}
+
+.landing-title {
+  font-size: clamp(38px, 5.5vw, 72px); font-weight: 700; line-height: 1.05;
+  letter-spacing: -0.02em; margin-bottom: 48px; color: var(--white);
+}
+.landing-title em { font-style: normal; color: var(--orange); }
+
+/* Cards */
+.cards {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+  flex: 1;
+}
+@media (max-width: 900px) { .cards { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+
+.model-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 26px 24px 22px;
+  cursor: pointer; transition: border-color 0.2s, transform 0.18s, box-shadow 0.2s;
+  display: flex; flex-direction: column; gap: 10px;
+  position: relative; overflow: hidden;
+}
+.model-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  border-radius: 12px 12px 0 0; background: var(--orange);
+}
+/* all cards get orange accent */
+.model-card.nand::before,
+.model-card.nsfet::before,
+.model-card.finfet::before,
+.model-card.planar::before,
+.model-card.tsv::before,
+.model-card.dram::before  { background: var(--orange); }
+
+.model-card:hover {
+  border-color: var(--orange);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 48px rgba(249,115,22,0.15);
+}
+
+.card-num {
+  font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.12em;
+}
+.card-title { font-size: 17px; font-weight: 700; line-height: 1.25; color: var(--white); }
+.card-title span { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 3px; }
+
+.card-cta {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+  color: var(--orange); text-transform: uppercase; margin-top: auto; padding-top: 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+.card-cta svg { transition: transform 0.2s; }
+.model-card:hover .card-cta svg { transform: translateX(4px); }
+
+/* Footer */
+.landing-footer {
+  margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--border);
+  font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.06em;
+  display: flex; justify-content: space-between; align-items: center;
+}
+
+/* ── VIEWER ── */
+#viewer {
+  position: fixed; inset: 0; z-index: 50;
+  display: none; flex-direction: column;
+}
+
+.viewer-header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 0 20px; height: 50px;
+  display: flex; align-items: center; gap: 16px;
+  flex-shrink: 0; z-index: 10;
+}
+
+.back-btn {
+  background: var(--panel); border: 1px solid var(--border);
+  color: var(--muted); font-family: var(--mono); font-size: 11px;
+  padding: 6px 14px; border-radius: 6px; cursor: pointer;
+  letter-spacing: 0.06em; transition: all 0.15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.back-btn:hover { color: var(--white); border-color: var(--orange); }
+
+.viewer-title {
+  font-family: var(--mono); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.04em; color: var(--orange);
+}
+/* all models get orange title in viewer */
+.viewer-title.nand, .viewer-title.nsfet, .viewer-title.finfet,
+.viewer-title.planar, .viewer-title.tsv, .viewer-title.dram { color: var(--orange); }
+
+.viewer-header-right {
+  margin-left: auto; font-family: var(--mono); font-size: 10px;
+  color: var(--muted); letter-spacing: 0.06em;
+}
+
+.viewer-body { flex: 1; display: flex; overflow: hidden; }
+
+#canvas-wrap { flex: 1; position: relative; cursor: grab; }
+#canvas-wrap:active { cursor: grabbing; }
+#three-canvas { width: 100%; height: 100%; display: block; }
+
+/* ── POINTER LABELS ── */
+.ptr-label {
+  position: absolute; pointer-events: none;
+  font-family: var(--mono); font-weight: 700; font-size: 12px;
+  display: flex; align-items: center; gap: 6px;
+  white-space: nowrap; transition: opacity 0.2s;
+}
+.ptr-dot {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,0.3);
+  box-shadow: 0 0 10px rgba(0,0,0,0.6);
+}
+.ptr-text {
+  background: rgba(10,15,30,0.88);
+  border: 1px solid var(--border);
+  border-radius: 5px; padding: 2px 8px;
+  backdrop-filter: blur(6px);
+  font-size: 10px;
+}
+
+/* ── Canvas overlay buttons ── */
+.canvas-btn {
+  position: absolute; background: var(--panel); border: 1px solid var(--border);
+  color: var(--muted); font-family: var(--mono); font-size: 10px;
+  padding: 7px 14px; border-radius: 6px; cursor: pointer;
+  letter-spacing: 0.06em; z-index: 5; transition: all 0.15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.canvas-btn:hover { color: var(--white); border-color: var(--orange); }
+.canvas-btn.active {
+  background: rgba(200,104,42,0.12); border-color: var(--orange);
+  color: var(--orange); box-shadow: 0 0 12px rgba(200,104,42,0.2);
+}
+.reset-btn        { bottom: 16px; left: 16px; }
+.xray-btn         { bottom: 52px; left: 16px; }
+.toggle-labels-btn { bottom: 16px; right: 16px; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ LANDING ═══════════════ -->
+<div id="landing">
+  <!-- PCB-inspired background -->
+  <div class="landing-bg">
+    <svg viewBox="0 0 1400 900" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <pattern id="pcb-grid" width="60" height="60" patternUnits="userSpaceOnUse">
+          <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#1c3060" stroke-width="0.6"/>
+        </pattern>
+      </defs>
+      <!-- Base grid -->
+      <rect width="1400" height="900" fill="url(#pcb-grid)"/>
+      <!-- Horizontal PCB traces -->
+      <line x1="0" y1="120" x2="320" y2="120" stroke="#1e3a70" stroke-width="2.5"/>
+      <line x1="320" y1="120" x2="380" y2="180" stroke="#1e3a70" stroke-width="2.5"/>
+      <line x1="380" y1="180" x2="700" y2="180" stroke="#1e3a70" stroke-width="2.5"/>
+      <circle cx="320" cy="120" r="5" fill="#1e3a70"/>
+      <circle cx="700" cy="180" r="5" fill="#1e3a70"/>
+      <!-- Trace cluster bottom-right -->
+      <line x1="900" y1="700" x2="1400" y2="700" stroke="#1e3a70" stroke-width="2"/>
+      <line x1="950" y1="740" x2="1400" y2="740" stroke="#1e3a70" stroke-width="2"/>
+      <line x1="1000" y1="780" x2="1400" y2="780" stroke="#1e3a70" stroke-width="2"/>
+      <!-- IC pads bottom-right corner -->
+      <rect x="1180" y="650" width="60" height="100" rx="4" fill="none" stroke="#1e3a70" stroke-width="1.5"/>
+      <rect x="1195" y="660" width="30" height="30" rx="2" fill="#1c3060"/>
+      <rect x="1195" y="700" width="30" height="30" rx="2" fill="#1c3060"/>
+      <!-- Via dots scattered -->
+      <circle cx="80" cy="350" r="4" fill="none" stroke="#1e3a70" stroke-width="1.5"/>
+      <circle cx="80" cy="350" r="2" fill="#1e3a70"/>
+      <circle cx="200" cy="600" r="4" fill="none" stroke="#1e3a70" stroke-width="1.5"/>
+      <circle cx="200" cy="600" r="2" fill="#1e3a70"/>
+      <circle cx="1300" cy="200" r="4" fill="none" stroke="#1e3a70" stroke-width="1.5"/>
+      <circle cx="1300" cy="200" r="2" fill="#1e3a70"/>
+      <circle cx="1100" cy="500" r="4" fill="none" stroke="#1e3a70" stroke-width="1.5"/>
+      <circle cx="1100" cy="500" r="2" fill="#1e3a70"/>
+      <!-- Long horizontal trace top -->
+      <line x1="700" y1="50" x2="1400" y2="50" stroke="#1e3a70" stroke-width="2"/>
+      <line x1="700" y1="60" x2="1400" y2="60" stroke="#1e3a70" stroke-width="1"/>
+      <!-- Vertical trace left -->
+      <line x1="50" y1="0" x2="50" y2="400" stroke="#1e3a70" stroke-width="2"/>
+      <line x1="50" y1="450" x2="50" y2="900" stroke="#1e3a70" stroke-width="1"/>
+      <circle cx="50" cy="420" r="6" fill="none" stroke="#f97316" stroke-width="1.5" opacity="0.5"/>
+      <circle cx="50" cy="420" r="3" fill="#f97316" opacity="0.5"/>
+      <!-- Connector pads left side -->
+      <rect x="0" y="220" width="18" height="8" rx="1" fill="#1e3a70"/>
+      <rect x="0" y="240" width="18" height="8" rx="1" fill="#1e3a70"/>
+      <rect x="0" y="260" width="18" height="8" rx="1" fill="#1e3a70"/>
+      <rect x="0" y="280" width="18" height="8" rx="1" fill="#1e3a70"/>
+      <!-- Orange accent trace -->
+      <line x1="400" y1="500" x2="550" y2="500" stroke="#f97316" stroke-width="1.5" opacity="0.3"/>
+      <line x1="550" y1="500" x2="600" y2="450" stroke="#f97316" stroke-width="1.5" opacity="0.3"/>
+      <circle cx="400" cy="500" r="3" fill="#f97316" opacity="0.4"/>
+      <!-- IC outline top-right -->
+      <rect x="1050" y="80" width="120" height="120" rx="4" fill="none" stroke="#1e3a70" stroke-width="1.5"/>
+      <line x1="1068" y1="80" x2="1068" y2="70" stroke="#1e3a70" stroke-width="1.5"/>
+      <line x1="1086" y1="80" x2="1086" y2="70" stroke="#1e3a70" stroke-width="1.5"/>
+      <line x1="1104" y1="80" x2="1104" y2="70" stroke="#1e3a70" stroke-width="1.5"/>
+      <line x1="1122" y1="80" x2="1122" y2="70" stroke="#1e3a70" stroke-width="1.5"/>
+      <line x1="1140" y1="80" x2="1140" y2="70" stroke="#1e3a70" stroke-width="1.5"/>
+      <circle cx="1065" cy="95" r="4" fill="#0a0f1e" stroke="#1e3a70" stroke-width="1"/>
+    </svg>
+  </div>
+
+  <div class="landing-inner">
+    <!-- Top bar -->
+    <div class="landing-topbar">
+      <div class="landing-topbar-left">EEE5400 / EEE4329 · Future of Microelectronics Technology</div>
+      <div class="landing-topbar-right">Instructor: Dr. Scott Thompson</div>
+    </div>
+
+    <h1 class="landing-title">Microelectronics<br><em>3D Structure</em><br>Viewer</h1>
+
+    <div class="cards">
+      <div class="model-card nand" onclick="openViewer('nand')">
+        <div class="card-num">MODEL 01</div>
+        <div class="card-title">3D NAND Flash Memory<span>Vertical Channel (V-NAND) Architecture</span></div>
+        <div class="card-cta">Open 3D Viewer <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+
+      <div class="model-card nsfet" onclick="openViewer('nsfet')">
+        <div class="card-num">MODEL 02</div>
+        <div class="card-title">Stacked Nanosheet FET<span>Gate-All-Around (GAA) Transistor</span></div>
+        <div class="card-cta">Open 3D Viewer <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+
+      <div class="model-card finfet" onclick="openViewer('finfet')">
+        <div class="card-num">MODEL 03</div>
+        <div class="card-title">FinFET (14nm Tri-Gate)<span>Bulk Silicon Fin Transistor</span></div>
+        <div class="card-cta">Open 3D Viewer <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+
+      <div class="model-card planar" onclick="openViewer('planar')">
+        <div class="card-num">MODEL 04</div>
+        <div class="card-title">Planar MOSFET<span>Classical n-MOSFET Structure</span></div>
+        <div class="card-cta">Open 3D Viewer <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+
+      <div class="model-card tsv" onclick="openViewer('tsv')">
+        <div class="card-num">MODEL 05</div>
+        <div class="card-title">TSV — 3D IC Stack<span>Through-Silicon Via Interconnect</span></div>
+        <div class="card-cta">Open 3D Viewer <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+
+      <div class="model-card dram" onclick="openViewer('dram')">
+        <div class="card-num">MODEL 06</div>
+        <div class="card-title">DRAM Cell (1T1C)<span>Deep Trench Capacitor Array</span></div>
+        <div class="card-cta">Open 3D Viewer <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+    </div>
+
+    <div class="landing-footer">
+      <span>EEE 5400 / EEE 4329</span>
+      <span>University of Florida</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ VIEWER ═══════════════ -->
+<div id="viewer">
+  <div class="viewer-header">
+    <button class="back-btn" onclick="closeViewer()">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M10 6H2M5 2L1 6l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back
+    </button>
+    <div class="viewer-title" id="viewer-title">—</div>
+    <div class="viewer-header-right">EEE5400 / EEE4329 · University of Florida</div>
+  </div>
+
+  <div class="viewer-body">
+    <div id="canvas-wrap">
+      <canvas id="three-canvas"></canvas>
+      <svg id="pointer-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;"></svg>
+      <div id="labels-container" style="position:absolute;inset:0;pointer-events:none;"></div>
+      <button class="canvas-btn reset-btn" onclick="resetCamera()">Reset View</button>
+      <button class="canvas-btn xray-btn" id="xray-btn" onclick="toggleXray()">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/><circle cx="6" cy="6" r="2.5" stroke="currentColor" stroke-width="1.2"/><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="1"/></svg>
+        X-Ray
+      </button>
+      <button class="canvas-btn toggle-labels-btn" onclick="toggleLabels()">Toggle Labels</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════
+// DATA DEFINITIONS
+// ═══════════════════════════════════════════════
+
+const MODELS = {
+
+  nand: {
+    title: '3D NAND Flash Memory',
+    accentColor: '#e8a020',
+    xrayDefault: true,  // channel holes & ONO hidden inside solid layer slabs
+    components: [
+      { id:1,  name:'Bit Line (BL)',                    color:'#c0a060', desc:'Metal interconnect connecting channel top to peripheral circuitry. One BL per channel hole column.' },
+      { id:2,  name:'String Select Line (SSL)',          color:'#e8a020', desc:'Top gate electrode selecting individual NAND strings. Controls channel connection to the bit line.' },
+      { id:3,  name:'Word Lines (WL) — Tungsten',       color:'#b0b0b0', desc:'Horizontal tungsten gate plates (8 shown; real devices use 48–256). Each WL controls one memory cell layer.' },
+      { id:4,  name:'Ground Select Line (GSL)',          color:'#d4880a', desc:'Bottom gate electrode, symmetric to SSL. Controls connection to the common source line.' },
+      { id:5,  name:'Poly-Si Channel',                  color:'#cc3333', desc:'Vertical cylindrical poly-Si pillar through the stack. Current flows vertically through each memory cell.' },
+      { id:6,  name:'ONO Charge-Trap Layer',            color:'#e8d44d', desc:'Tunnel Oxide / Si₃N₄ Trap / Blocking Oxide stack on channel hole wall. Yellow = nitride trap layer stores charge (data).' },
+      { id:7,  name:'SiO₂ Inter-layer Oxide',          color:'#5b9bd5', desc:'Blue oxide layers between word lines. Electrically isolates adjacent gate plates in the ONON stack.' },
+      { id:8,  name:'Common Source Line (CSL)',          color:'#4aab4a', desc:'Heavily-doped n+ silicon at base of all strings. Shared ground reference for the entire memory array.' },
+      { id:9,  name:'Silicon Substrate',                color:'#8c8c9a', desc:'p-type bulk silicon. Mechanical support and well bias source during erase operations.' },
+      { id:10, name:'Staircase Word-Line Contacts',     color:'#a0784a', desc:'Stepped terrace exposing each WL for individual tungsten contact vias. Enables per-layer addressing.' },
+    ],
+    build: buildNAND
+  },
+
+  nsfet: {
+    title: 'Stacked Nanosheet FET (GAA)',
+    accentColor: '#cc3333',
+    xrayDefault: true,  // nanosheets & HK dielectric hidden inside metal gate shell
+    components: [
+      { id:1, name:'Silicon Nanosheets (Channels)',     color:'#cc3333', desc:'Three horizontally stacked Si sheets (~5 nm thick, ~20 nm wide). Current flows laterally source-to-drain through each sheet.' },
+      { id:2, name:'High-k Gate Dielectric (HfO₂)',    color:'#a855f7', desc:'Sub-2 nm high-k film wrapping all sides of each nanosheet. Replaces SiO₂ to reduce gate leakage at scaled thicknesses.' },
+      { id:3, name:'Metal Gate (TiN/TaN)',              color:'#b0b0b0', desc:'Metal gate surrounding all nanosheet surfaces — true gate-all-around geometry. Controls threshold voltage and carrier density.' },
+      { id:4, name:'Inner Spacers (SiO₂/SiCN)',        color:'#5b9bd5', desc:'Blue dielectric plugs between nanosheet layers on S/D side. Isolate gate metal from epi S/D, reducing parasitic capacitance.' },
+      { id:5, name:'Outer Gate Spacers (Si₃N₄)',       color:'#e8d44d', desc:'Yellow nitride spacers flanking the gate stack. Protect gate during S/D epitaxy and set gate-to-contact distance.' },
+      { id:6, name:'Epitaxial Source / Drain (SiGe/SiP)', color:'#4aab4a', desc:'Green n+/p+ epi grown from nanosheet ends. Provides low-resistance contacts and compressive/tensile strain to the channel.' },
+      { id:7, name:'STI Oxide (SiO₂)',                 color:'#5b9bd5', desc:'Shallow Trench Isolation oxide surrounding the device. Electrically isolates adjacent transistors.' },
+      { id:8, name:'Silicon Substrate',                color:'#8c8c9a', desc:'Bulk p-type (100) Si wafer. Ground-plane implant below STI improves short-channel control.' },
+      { id:9, name:'ILD / Tungsten Contacts',          color:'#a0784a', desc:'Inter-layer dielectric with W/Co contacts. Connects source, gate, and drain to back-end metal routing.' },
+    ],
+    build: buildNSFET
+  },
+
+  finfet: {
+    title: 'FinFET — 14nm Tri-Gate',
+    accentColor: '#4ade80',
+    components: [
+      { id:1, name:'Silicon Fin (Channel)',          color:'#cc3333', desc:'Narrow vertical Si fin (~7nm wide, ~40nm tall). Gate controls three sides — top and both sidewalls — giving far better electrostatic control than planar.' },
+      { id:2, name:'HfO₂ Gate Dielectric',          color:'#a855f7', desc:'~1.8nm high-k hafnium oxide wrapping all three exposed fin surfaces. Replaces SiO₂ to suppress gate leakage at scaled gate lengths.' },
+      { id:3, name:'Metal Gate (TiN/TaN + fill)',    color:'#b0b0b0', desc:'Work-function metal (TiN for nFET, TaN for pFET) deposited by ALD, then filled with W or Al. Deposited after dummy poly removal in gate-last flow.' },
+      { id:4, name:'Gate Spacer (Si₃N₄)',            color:'#e8d44d', desc:'Nitride spacers on gate sidewalls. Self-align the raised S/D epitaxy and define the gate-to-contact distance. Also reduce gate-to-drain capacitance.' },
+      { id:5, name:'Raised Epitaxial Source/Drain',  color:'#4aab4a', desc:'SiP (nFET) or SiGe (pFET) epitaxy grown from fin top and sidewalls, merging adjacent fins. Lowers series resistance and provides strain to the channel.' },
+      { id:6, name:'STI Oxide (SiO₂)',              color:'#5b9bd5', desc:'Shallow Trench Isolation fills the space between fins and sets the effective fin height above STI. Controls sub-fin leakage.' },
+      { id:7, name:'Si Substrate / Well',            color:'#8c8c9a', desc:'p-type bulk Si. Below the STI the substrate is continuous. Ground plane implants below STI suppress leakage through the substrate.' },
+      { id:8, name:'ILD & Tungsten Contacts (CA)',   color:'#a0784a', desc:'SiO₂ inter-layer dielectric with W plug contacts landing on S/D epi and on the gate metal. First level of the back-end interconnect.' },
+    ],
+    build: buildFinFET
+  },
+
+  planar: {
+    title: 'Planar MOSFET (Classical)',
+    accentColor: '#a78bfa',
+    components: [
+      { id:1, name:'Polysilicon Gate',               color:'#cc3333', desc:'Heavily n+ doped polysilicon gate electrode deposited over gate oxide. The original gate material before metal gates replaced it below 45nm.' },
+      { id:2, name:'Gate Oxide (SiO₂)',             color:'#5b9bd5', desc:'Thermally grown SiO₂, ~2–10nm thick. The gate insulator — thinner = stronger field control but more leakage. Below 2nm it leaks too much; replaced by high-k.' },
+      { id:3, name:'n+ Source Region',               color:'#4aab4a', desc:'Heavily n-doped region (arsenic or phosphorus implant, ~10²⁰ cm⁻³). One end of the channel. Electrons flow from here to drain when device is on.' },
+      { id:4, name:'n+ Drain Region',                color:'#22c55e', desc:'Mirror of source. Positive drain voltage pulls electrons across the channel. Asymmetry in use (high voltage) but symmetric in structure.' },
+      { id:5, name:'p-type Channel / Body',          color:'#8c8c9a', desc:'Lightly p-doped Si between source and drain. Gate field inverts this region to form an n-type inversion layer (channel) when Vgs > Vt.' },
+      { id:6, name:'Field Oxide / LOCOS (SiO₂)',    color:'#5b9bd5', desc:'Thick isolation oxide grown around device edges by LOCOS or STI. Prevents current flow between adjacent transistors.' },
+      { id:7, name:'p-type Substrate',               color:'#6b6b80', desc:'Bulk p-Si wafer. All n-channel MOSFETs share the same substrate. The body terminal connects here (usually grounded in digital logic).' },
+      { id:8, name:'Metal Contacts & M1',            color:'#a0784a', desc:'Al or W contacts and first metal layer connecting gate, source, and drain to the circuit. Landed in contact holes etched through ILD.' },
+      { id:9, name:'Sidewall Spacers (SiO₂/Si₃N₄)', color:'#e8d44d', desc:'Deposited after gate etch, before S/D implant. Self-align deep S/D implants away from the gate edge and form LDD (lightly-doped drain) gradients.' },
+    ],
+    build: buildPlanar
+  },
+
+  tsv: {
+    title: '3D IC Stack with TSV',
+    accentColor: '#f472b6',
+    xrayDefault: true,  // Cu TSV, oxide liner & barrier all hidden inside solid Si dies
+    components: [
+      { id:1,  name:'Silicon Die (×3)',               color:'#8c8c9a', desc:'Three thinned Si dies (~50–100µm each after backgrinding). Each die contains active CMOS circuitry on its front side.' },
+      { id:2,  name:'Copper TSV Fill',                color:'#b87333', desc:'Electroplated copper pillar (5–25µm diameter) etched vertically through the die by deep Bosch RIE. Carries signals, power, and ground between dies.' },
+      { id:3,  name:'SiO₂ Oxide Liner',              color:'#5b9bd5', desc:'~100nm PECVD or ALD oxide deposited on TSV sidewalls before copper fill. Electrically isolates the Cu TSV from the silicon substrate.' },
+      { id:4,  name:'TaN/Ta Diffusion Barrier',       color:'#7c6b8a', desc:'~20–30nm barrier prevents Cu atoms from diffusing into Si during anneal steps. Also acts as adhesion layer between oxide liner and Cu seed.' },
+      { id:5,  name:'Microbumps (Cu/Sn)',             color:'#d4a020', desc:'Small solder or Cu–Cu thermocompression bumps (~10–40µm pitch) connecting TSV landing pads between adjacent dies. Enable die-to-die signal transfer.' },
+      { id:6,  name:'BEOL Metal Routing (M1–M3)',     color:'#c0a060', desc:'Back-end-of-line Cu/W interconnect layers on each die front-side. Routes signals from active devices to the TSV landing pads and bump pads.' },
+      { id:7,  name:'Bonding / Adhesive Layer',       color:'#a0784a', desc:'Die-attach film or Cu–Cu direct bonding interface between stacked dies. Provides mechanical adhesion and thermal path.' },
+      { id:8,  name:'ILD (Inter-Layer Dielectric)',   color:'#4a5568', desc:'SiO₂ or low-k dielectric surrounding BEOL metal layers on each die. Provides electrical isolation between metal lines within the routing stack.' },
+      { id:9,  name:'Substrate / Interposer',         color:'#52525b', desc:'Bottom organic substrate or Si interposer carrying the full die stack. Contains C4 solder bumps on its underside for PCB attachment.' },
+      { id:10, name:'TSV Landing Pad',                color:'#e8a020', desc:'Metal pad on front or back side of the die exposed after CMP/backgrind. The electrical contact point for the microbump connecting to the next die.' },
+    ],
+    build: buildTSV
+  },
+
+  dram: {
+    title: 'DRAM Cell — 1T1C Deep Trench',
+    accentColor: '#22d3ee',
+    xrayDefault: true,  // trench capacitor entirely buried inside substrate
+    components: [
+      { id:1,  name:'p⁻ Silicon Substrate',           color:'#8c8c9a', desc:'Lightly p-doped bulk Si. The continuous body of the substrate also forms the outer electrode (buried plate) of the deep trench capacitor in the lower region.' },
+      { id:2,  name:'Deep Trench (DT)',                color:'#3a3a4a', desc:'High-aspect-ratio hole (~8:1) etched ~7–8µm into the substrate by deep RIE. Houses the entire storage capacitor structure.' },
+      { id:3,  name:'n⁺ Buried Plate',                color:'#4aab4a', desc:'Heavily n-doped outer electrode of the trench capacitor. Formed by arsenic or phosphorus outdiffusion from doped glass into the lower trench sidewall. One plate of the storage capacitor.' },
+      { id:4,  name:'Node Dielectric (SiO₂/Si₃N₄)',  color:'#e8d44d', desc:'Thin (~5–7nm) ONO or SiO₂ layer lining the lower trench. The capacitor dielectric separating buried plate from storage node. Must have minimal leakage to maintain stored charge.' },
+      { id:5,  name:'Poly Storage Node (Inner Electrode)', color:'#cc3333', desc:'n⁺ doped poly-Si fill in the lower trench. Inner electrode of the capacitor. Connected to the access transistor source via buried strap. Stores the charge representing the bit.' },
+      { id:6,  name:'Collar Oxide',                   color:'#5b9bd5', desc:'Thick SiO₂ collar in the upper trench. Prevents leakage between the storage node poly and the substrate in the upper region where the capacitor dielectric is absent.' },
+      { id:7,  name:'Buried Strap (n⁺ poly)',         color:'#f97316', desc:'Short poly-Si bridge connecting the storage node to the transistor source diffusion. Allows the trench to be self-aligned to the transistor without a direct contact hole.' },
+      { id:8,  name:'STI (Shallow Trench Isolation)', color:'#5b9bd5', desc:'SiO₂-filled trenches at the surface isolating adjacent cells from each other and from the passing wordline. Also caps the top of the deep trench.' },
+      { id:9,  name:'Access Transistor (nFET)',        color:'#a855f7', desc:'Planar n-channel MOSFET. Gate = wordline; source connects to storage node via buried strap; drain connects to bitline contact. Turns on to read/write the capacitor.' },
+      { id:10, name:'Word Line (WL / Gate poly)',      color:'#e8a020', desc:'Polysilicon or metal word line running across a row of cells, acting as the gate of each access transistor. Assert WL high to connect capacitor to bit line.' },
+      { id:11, name:'Bit Line Contact & Bit Line (BL)', color:'#b0b0b0', desc:'Metal contact from transistor drain up to the metal bit line. The BL is precharged to VDD/2; charge sharing with the capacitor creates a small ΔV which the sense amplifier detects.' },
+    ],
+    build: buildDRAM
+  }
+};
+
+// ═══════════════════════════════════════════════
+// THREE.JS SETUP
+// ═══════════════════════════════════════════════
+
+let renderer, scene, camera, controls;
+let currentModel = null;
+let labelObjects = [];
+let labelsVisible = true;
+let animFrameId = null;
+let activeModel = null;
+let xrayMode = false;
+let sceneMeshes = []; // all geometry meshes, registered on creation
+
+function initThree() {
+  const canvas = document.getElementById('three-canvas');
+  const wrap = document.getElementById('canvas-wrap');
+
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setClearColor(0x0a0f1e, 1);
+
+  scene = new THREE.Scene();
+
+  // Lights
+  const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+  scene.add(ambient);
+
+  const dir1 = new THREE.DirectionalLight(0xffffff, 0.9);
+  dir1.position.set(5, 8, 5);
+  dir1.castShadow = true;
+  scene.add(dir1);
+
+  const dir2 = new THREE.DirectionalLight(0x6699ff, 0.4);
+  dir2.position.set(-5, 3, -5);
+  scene.add(dir2);
+
+  const fill = new THREE.DirectionalLight(0xffffff, 0.25);
+  fill.position.set(0, -5, 5);
+  scene.add(fill);
+
+  // Camera
+  camera = new THREE.PerspectiveCamera(45, wrap.clientWidth / wrap.clientHeight, 0.01, 1000);
+  camera.position.set(6, 5, 8);
+
+  // Simple orbit controls
+  setupOrbitControls(canvas, wrap);
+
+  // Resize
+  window.addEventListener('resize', onResize);
+  onResize();
+}
+
+// ── Orbit controls (no import needed) ──
+let orbit = { isRotating:false, isPanning:false,
+  lastX:0, lastY:0,
+  theta: Math.PI/6, phi: Math.PI/3.5, radius: 12,
+  target: new THREE.Vector3(0,0,0),
+  panX: 0, panY: 0
+};
+
+function setupOrbitControls(canvas, wrap) {
+  canvas.addEventListener('mousedown', e => {
+    if (e.button === 0) { orbit.isRotating = true; }
+    if (e.button === 2) { orbit.isPanning = true; }
+    orbit.lastX = e.clientX; orbit.lastY = e.clientY;
+    e.preventDefault();
+  });
+  window.addEventListener('mouseup', () => { orbit.isRotating = false; orbit.isPanning = false; });
+  window.addEventListener('mousemove', e => {
+    const dx = e.clientX - orbit.lastX;
+    const dy = e.clientY - orbit.lastY;
+    orbit.lastX = e.clientX; orbit.lastY = e.clientY;
+    if (orbit.isRotating) {
+      orbit.theta -= dx * 0.008;
+      orbit.phi = Math.max(0.1, Math.min(Math.PI - 0.1, orbit.phi - dy * 0.008));
+    }
+    if (orbit.isPanning) {
+      const panSpeed = orbit.radius * 0.0015;
+      orbit.target.x -= dx * panSpeed;
+      orbit.target.y += dy * panSpeed;
+    }
+  });
+  canvas.addEventListener('wheel', e => {
+    orbit.radius = Math.max(2, Math.min(40, orbit.radius + e.deltaY * 0.02));
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  // Touch support
+  let touches = [];
+  let lastPinchDist = null;
+  canvas.addEventListener('touchstart', e => {
+    touches = Array.from(e.touches);
+    if (touches.length === 1) { orbit.isRotating = true; orbit.lastX = touches[0].clientX; orbit.lastY = touches[0].clientY; }
+    lastPinchDist = null;
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('touchend', e => { orbit.isRotating = false; lastPinchDist = null; }, { passive: false });
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const ts = Array.from(e.touches);
+    if (ts.length === 1 && orbit.isRotating) {
+      const dx = ts[0].clientX - orbit.lastX, dy = ts[0].clientY - orbit.lastY;
+      orbit.theta -= dx * 0.008; orbit.phi = Math.max(0.1, Math.min(Math.PI-0.1, orbit.phi - dy * 0.008));
+      orbit.lastX = ts[0].clientX; orbit.lastY = ts[0].clientY;
+    }
+    if (ts.length === 2) {
+      const dist = Math.hypot(ts[0].clientX - ts[1].clientX, ts[0].clientY - ts[1].clientY);
+      if (lastPinchDist !== null) orbit.radius = Math.max(2, Math.min(40, orbit.radius - (dist - lastPinchDist) * 0.05));
+      lastPinchDist = dist;
+    }
+  }, { passive: false });
+}
+
+function updateCamera() {
+  const x = orbit.target.x + orbit.radius * Math.sin(orbit.phi) * Math.sin(orbit.theta);
+  const y = orbit.target.y + orbit.radius * Math.cos(orbit.phi);
+  const z = orbit.target.z + orbit.radius * Math.sin(orbit.phi) * Math.cos(orbit.theta);
+  camera.position.set(x, y, z);
+  camera.lookAt(orbit.target);
+}
+
+function onResize() {
+  const wrap = document.getElementById('canvas-wrap');
+  if (!wrap) return;
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h);
+  if (camera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
+}
+
+function animate() {
+  animFrameId = requestAnimationFrame(animate);
+  updateCamera();
+  renderer.render(scene, camera);
+  updateLabelPositions();
+}
+
+function resetCamera() {
+  orbit.theta = Math.PI / 6;
+  orbit.phi = Math.PI / 3.5;
+  orbit.radius = 12;
+  orbit.target.set(0, 0, 0);
+}
+
+// ═══════════════════════════════════════════════
+// LABEL SYSTEM — with SVG pointer lines
+// ═══════════════════════════════════════════════
+
+function createLabel(num, text, tipPos, labelPos, color, componentId) {
+  const container = document.getElementById('labels-container');
+  const svg = document.getElementById('pointer-svg');
+
+  // Badge element
+  const el = document.createElement('div');
+  el.className = 'ptr-label';
+  el.setAttribute('data-id', componentId);
+  el.style.pointerEvents = 'auto';
+  el.innerHTML = `
+    <div class="ptr-dot" style="background:${color}33; border-color:${color}; color:${color}">${num}</div>
+    <div class="ptr-text" style="color:${color}; border-color:${color}55">${text}</div>
+  `;
+  el.addEventListener('click', () => highlightComponent(componentId));
+  container.appendChild(el);
+
+  // SVG line
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('stroke', color);
+  line.setAttribute('stroke-width', '1.5');
+  line.setAttribute('stroke-dasharray', '4 3');
+  line.setAttribute('opacity', '0.85');
+  svg.appendChild(line);
+
+  // SVG tip circle (small dot on the structure surface)
+  const tipDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  tipDot.setAttribute('r', '3.5');
+  tipDot.setAttribute('fill', color);
+  tipDot.setAttribute('opacity', '1');
+  svg.appendChild(tipDot);
+
+  return {
+    el,
+    line,
+    tipDot,
+    tipPos: tipPos.clone(),
+    labelPos: labelPos.clone(),
+    color
+  };
+}
+
+function updateLabelPositions() {
+  if (!camera || !renderer) return;
+  const wrap = document.getElementById('canvas-wrap');
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+
+  for (const lbl of labelObjects) {
+    // Project both positions
+    const tp = lbl.tipPos.clone().project(camera);
+    const lp = lbl.labelPos.clone().project(camera);
+
+    const tipX = (tp.x * 0.5 + 0.5) * W;
+    const tipY = (-tp.y * 0.5 + 0.5) * H;
+    const labX = (lp.x * 0.5 + 0.5) * W;
+    const labY = (-lp.y * 0.5 + 0.5) * H;
+
+    const visible = tp.z < 1 && lp.z < 1;
+    const op = visible ? '1' : '0';
+
+    // Position badge at labelPos
+    lbl.el.style.left = labX + 'px';
+    lbl.el.style.top = labY + 'px';
+    lbl.el.style.opacity = op;
+    lbl.el.style.transform = 'translate(-50%, -50%)';
+
+    // Draw line from badge center to tip
+    lbl.line.setAttribute('x1', labX);
+    lbl.line.setAttribute('y1', labY);
+    lbl.line.setAttribute('x2', tipX);
+    lbl.line.setAttribute('y2', tipY);
+    lbl.line.setAttribute('opacity', visible ? '0.7' : '0');
+
+    // Tip dot
+    lbl.tipDot.setAttribute('cx', tipX);
+    lbl.tipDot.setAttribute('cy', tipY);
+    lbl.tipDot.setAttribute('opacity', visible ? '1' : '0');
+  }
+}
+
+function clearLabels() {
+  const container = document.getElementById('labels-container');
+  const svg = document.getElementById('pointer-svg');
+  container.innerHTML = '';
+  svg.innerHTML = '';
+  labelObjects = [];
+}
+
+function toggleLabels() {
+  labelsVisible = !labelsVisible;
+  const op = labelsVisible ? '1' : '0';
+  document.getElementById('labels-container').style.opacity = op;
+  document.getElementById('pointer-svg').style.opacity = op;
+}
+
+function toggleXray() {
+  xrayMode = !xrayMode;
+  const btn = document.getElementById('xray-btn');
+  btn.classList.toggle('active', xrayMode);
+
+  // Per-material xray opacities — outer structural parts more transparent,
+  // inner channel/ONO parts less so, so inner workings are visible
+  const xrayOpacity = (mesh) => {
+    const c = (mesh.userData.solidColor || '').toLowerCase();
+    // Channel / active Si / epi — least transparent so they remain visible
+    if (c === '#cc3333' || c === '#4aab4a') return 0.45;
+    // High-k, ONO, nitride — semi-transparent
+    if (c === '#a855f7' || c === '#e8d44d' || c === '#5b9bd5') return 0.30;
+    // Metals, contacts — moderate
+    if (c === '#b0b0b0' || c === '#a0784a' || c === '#c0a060') return 0.25;
+    // Select lines, gate metals
+    if (c === '#e8a020' || c === '#d4880a') return 0.35;
+    // Everything else (substrate, STI, CSL, etc.)
+    return 0.18;
+  };
+
+  renderer.sortObjects = xrayMode;
+
+  for (const mesh of sceneMeshes) {
+    const mat = mesh.material;
+    if (xrayMode) {
+      mat.transparent = true;
+      mat.opacity = xrayOpacity(mesh);
+      mat.depthWrite = false;
+      mat.side = THREE.DoubleSide;
+    } else {
+      mat.transparent = false;
+      mat.opacity = 1;
+      mat.depthWrite = true;
+      mat.side = THREE.FrontSide;
+    }
+    mat.needsUpdate = true;
+  }
+}
+
+function highlightComponent(id) {
+  // Legend removed — no-op
+}
+
+// ═══════════════════════════════════════════════
+// HELPER: make a box mesh
+// ═══════════════════════════════════════════════
+
+function box(w, h, d, color) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const mat = new THREE.MeshPhongMaterial({
+    color: new THREE.Color(color),
+    transparent: false,
+    opacity: 1,
+    shininess: 70,
+    specular: new THREE.Color(0x444444),
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.solidColor = color;
+  sceneMeshes.push(mesh);
+  return mesh;
+}
+
+function cylinder(rTop, rBot, h, segs, color) {
+  const geo = new THREE.CylinderGeometry(rTop, rBot, h, segs);
+  const mat = new THREE.MeshPhongMaterial({
+    color: new THREE.Color(color),
+    transparent: false,
+    opacity: 1,
+    shininess: 90,
+    specular: new THREE.Color(0x444444),
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.solidColor = color;
+  sceneMeshes.push(mesh);
+  return mesh;
+}
+
+// ═══════════════════════════════════════════════
+// BUILD 3D NAND MODEL
+// ═══════════════════════════════════════════════
+
+function buildNAND() {
+  clearScene();
+  clearLabels();
+
+  const root = new THREE.Group();
+  scene.add(root);
+
+  const C = MODELS.nand.components;
+  const colBL    = C[0].color;
+  const colSSL   = C[1].color;
+  const colWL    = C[2].color;
+  const colGSL   = C[3].color;
+  const colCH    = C[4].color;
+  const colONO   = C[5].color;
+  const colONON  = C[6].color;
+  const colCSL   = C[7].color;
+  const colSub   = C[8].color;
+  const colStair = C[9].color;
+
+  const numWL = 8;
+  const WL_h = 0.22, OX_h = 0.18, spacing = WL_h + OX_h;
+  const stackH = numWL * spacing + 2 * spacing; // SSL + GSL
+  const arrayW = 4.5, arrayD = 3.5;
+
+  // ── Silicon Substrate ──
+  const sub = box(arrayW + 2, 0.6, arrayD + 1, colSub);
+  sub.position.set(0, -0.3, 0);
+  root.add(sub);
+
+  // ── Common Source Line ──
+  const csl = box(arrayW + 0.5, 0.22, arrayD + 0.3, colCSL);
+  csl.position.set(0, 0.11, 0);
+  root.add(csl);
+
+  // ── ONON Alternating Stack ──
+  let y = 0.22;
+  const layerGroup = new THREE.Group();
+
+  // GSL
+  const gsl = box(arrayW, WL_h + 0.06, arrayD, colGSL);
+  gsl.position.set(0, y + (WL_h + 0.06) / 2, 0);
+  layerGroup.add(gsl);
+  y += WL_h + 0.06 + OX_h;
+
+  // Oxide between GSL and WL1
+  const ox0 = box(arrayW, OX_h, arrayD, colONON);
+  ox0.position.set(0, y - OX_h / 2, 0);
+  layerGroup.add(ox0);
+
+  // WL layers
+  const wlPositions = [];
+  for (let i = 0; i < numWL; i++) {
+    const wl = box(arrayW, WL_h, arrayD, colWL);
+    wl.position.set(0, y + WL_h / 2, 0);
+    layerGroup.add(wl);
+    wlPositions.push(y + WL_h / 2);
+    y += WL_h;
+
+    const ox = box(arrayW, OX_h, arrayD, colONON);
+    ox.position.set(0, y + OX_h / 2, 0);
+    layerGroup.add(ox);
+    y += OX_h;
+  }
+
+  // SSL
+  const ssl = box(arrayW, WL_h + 0.06, arrayD, colSSL);
+  ssl.position.set(0, y + (WL_h + 0.06) / 2, 0);
+  layerGroup.add(ssl);
+  const sslY = y + (WL_h + 0.06) / 2;
+  y += WL_h + 0.06;
+
+  root.add(layerGroup);
+
+  // ── Channel Holes ── (3 x 2 array, cut through stack)
+  const chXs = [-1.2, 0, 1.2];
+  const chZs = [-0.8, 0.8];
+  const chR = 0.18, chtR = 0.13;
+  const channelTopY = y;
+  const channelBotY = 0.22;
+
+  chXs.forEach(cx => {
+    chZs.forEach(cz => {
+      // ONO tube (outer)
+      const ono = cylinder(chR, chR, channelTopY - channelBotY, 16, colONO);
+      ono.position.set(cx, channelBotY + (channelTopY - channelBotY) / 2, cz);
+      root.add(ono);
+
+      // Poly-Si channel (inner)
+      const ch = cylinder(chtR, chtR, channelTopY - channelBotY, 16, colCH);
+      ch.position.set(cx, channelBotY + (channelTopY - channelBotY) / 2, cz);
+      root.add(ch);
+
+      // Bit Line stub
+      const bl = box(0.08, 0.35, 0.08, colBL);
+      bl.position.set(cx, channelTopY + 0.175, cz);
+      root.add(bl);
+    });
+  });
+
+  // Bit line horizontal bar (connecting columns)
+  chZs.forEach(cz => {
+    const blbar = box(arrayW * 0.7, 0.06, 0.06, colBL);
+    blbar.position.set(0, channelTopY + 0.35, cz);
+    root.add(blbar);
+  });
+
+  // ── Staircase contacts ──
+  const stepW = 0.6, stepD = arrayD * 0.6;
+  for (let s = 0; s < numWL; s++) {
+    const stepH = WL_h * 0.8;
+    const stepMesh = box(stepW, stepH, stepD, colStair);
+    const stepX = arrayW / 2 + 0.35 + s * 0.3;
+    const stepY = wlPositions[s];
+    stepMesh.position.set(stepX, stepY + stepH / 2, arrayD * 0.1);
+    root.add(stepMesh);
+
+    // vertical contact via
+    const via = cylinder(0.04, 0.04, stepY - 0.3, 8, colStair);
+    via.position.set(stepX, (stepY - 0.3) / 2 + 0.15, arrayD * 0.1);
+    root.add(via);
+  }
+
+  // ── Labels: { tip = point ON the structure, label = badge anchor offset outward } ──
+  const midWLY = wlPositions[numWL >> 1];
+  const rO = root.position; // will be applied after, adjust manually by stackH/2
+  const off = stackH / 2; // root is shifted down by this after labels are set
+
+  const labDefs = [
+    // Bit Line — tip on BL bar, badge up-right
+    { comp: C[0],  tip: new THREE.Vector3(1.2,  channelTopY + 0.35, -0.8), label: new THREE.Vector3(3.5, channelTopY + 1.8, -0.8) },
+    // SSL — tip on SSL slab edge, badge upper-left
+    { comp: C[1],  tip: new THREE.Vector3(-arrayW/2, sslY, 0),             label: new THREE.Vector3(-4.5, sslY + 1.5, 0) },
+    // Word Lines — tip on WL edge mid-stack, badge left
+    { comp: C[2],  tip: new THREE.Vector3(-arrayW/2, midWLY, 0),           label: new THREE.Vector3(-5.0, midWLY + 0.5, 0) },
+    // GSL — tip on GSL edge, badge lower-left
+    { comp: C[3],  tip: new THREE.Vector3(-arrayW/2, 0.38, 0),             label: new THREE.Vector3(-5.0, 0.38 - 1.2, 0) },
+    // Poly-Si Channel — tip on channel cylinder surface
+    { comp: C[4],  tip: new THREE.Vector3(0, midWLY, -chR - 0.05),        label: new THREE.Vector3(0, midWLY - 1.5, -4.0) },
+    // ONO layer — tip on ONO ring surface
+    { comp: C[5],  tip: new THREE.Vector3(1.2, midWLY, chR + 0.02),       label: new THREE.Vector3(3.5, midWLY + 1.0, 3.5) },
+    // SiO2 inter-layer oxide — tip on oxide slab edge
+    { comp: C[6],  tip: new THREE.Vector3(arrayW/2, midWLY - 0.5, 0),     label: new THREE.Vector3(5.5, midWLY - 0.5, 0) },
+    // CSL — tip on CSL top surface
+    { comp: C[7],  tip: new THREE.Vector3(0, 0.22, arrayD/2),             label: new THREE.Vector3(0, 0.22 - 1.5, 4.5) },
+    // Substrate — tip on substrate surface
+    { comp: C[8],  tip: new THREE.Vector3(0, -0.3, arrayD/2 + 0.5),       label: new THREE.Vector3(3.0, -1.8, 4.5) },
+    // Staircase contacts — tip on first step
+    { comp: C[9],  tip: new THREE.Vector3(arrayW/2 + 0.65, wlPositions[2], arrayD * 0.1), label: new THREE.Vector3(6.5, wlPositions[2] + 1.5, 0) },
+  ];
+
+  labDefs.forEach(({ comp, tip, label }) => {
+    // Offset both points by root's eventual y shift
+    const tipW  = tip.clone().add(new THREE.Vector3(0, -off, 0));
+    const labW  = label.clone().add(new THREE.Vector3(0, -off, 0));
+    const lbl = createLabel(comp.id, comp.name, tipW, labW, comp.color, comp.id);
+    labelObjects.push(lbl);
+  });
+
+  // Center model
+  root.position.set(0, -stackH / 2, 0);
+  currentModel = root;
+
+  orbit.theta = Math.PI / 5;
+  orbit.phi = Math.PI / 3;
+  orbit.radius = 14;
+  orbit.target.set(0, 0, 0);
+}
+
+// ═══════════════════════════════════════════════
+// BUILD NANOSHEET FET MODEL
+// ═══════════════════════════════════════════════
+
+function buildNSFET() {
+  clearScene();
+  clearLabels();
+
+  const root = new THREE.Group();
+  scene.add(root);
+
+  const C = MODELS.nsfet.components;
+  const colNS    = C[0].color;
+  const colHK    = C[1].color;
+  const colMG    = C[2].color;
+  const colInner = C[3].color;
+  const colOuter = C[4].color;
+  const colSD    = C[5].color;
+  const colSTI   = C[6].color;
+  const colSub   = C[7].color;
+  const colILD   = C[8].color;
+
+  const nsW = 2.0;    // nanosheet width (Z)
+  const nsT = 0.28;   // nanosheet thickness (Y)
+  const nsL = 3.8;    // total length (X) including S/D
+  const gateL = 1.4;  // gate length (X)
+  const sdL = (nsL - gateL) / 2; // S/D length each side
+
+  const numSheets = 3;
+  const sheetSpacing = 0.65; // center-to-center Y
+  const baseY = 0.8; // bottom nanosheet center Y
+
+  // ── Substrate ──
+  const sub = box(nsL + 1.2, 0.7, nsW + 1.4, colSub);
+  sub.position.set(0, -0.35, 0);
+  root.add(sub);
+
+  // ── STI oxide ──
+  const sti = box(nsL + 0.6, 0.72, nsW + 0.6, colSTI);
+  sti.position.set(0, 0.36, 0);
+  root.add(sti);
+
+  // For each nanosheet layer
+  for (let i = 0; i < numSheets; i++) {
+    const cy = baseY + i * sheetSpacing;
+
+    // ── High-k dielectric (wrapping) ──
+    const hkThick = 0.05;
+    const hkT = box(gateL, hkThick, nsW + hkThick * 2, colHK);
+    hkT.position.set(0, cy + nsT / 2 + hkThick / 2, 0);
+    root.add(hkT);
+    const hkB = box(gateL, hkThick, nsW + hkThick * 2, colHK);
+    hkB.position.set(0, cy - nsT / 2 - hkThick / 2, 0);
+    root.add(hkB);
+    const hkL = box(gateL, nsT, hkThick, colHK);
+    hkL.position.set(0, cy, nsW / 2 + hkThick / 2);
+    root.add(hkL);
+    const hkR = box(gateL, nsT, hkThick, colHK);
+    hkR.position.set(0, cy, -nsW / 2 - hkThick / 2);
+    root.add(hkR);
+
+    // ── Metal Gate (outer shell) ──
+    const mgThick = 0.12;
+    const mgT = box(gateL, mgThick, nsW + (hkThick + mgThick) * 2, colMG);
+    mgT.position.set(0, cy + nsT / 2 + hkThick + mgThick / 2, 0);
+    root.add(mgT);
+    const mgB = box(gateL, mgThick, nsW + (hkThick + mgThick) * 2, colMG);
+    mgB.position.set(0, cy - nsT / 2 - hkThick - mgThick / 2, 0);
+    root.add(mgB);
+    const mgL = box(gateL, nsT + hkThick * 2 + mgThick * 2, mgThick, colMG);
+    mgL.position.set(0, cy, nsW / 2 + hkThick + mgThick / 2);
+    root.add(mgL);
+    const mgR = box(gateL, nsT + hkThick * 2 + mgThick * 2, mgThick, colMG);
+    mgR.position.set(0, cy, -nsW / 2 - hkThick - mgThick / 2);
+    root.add(mgR);
+
+    // ── Nanosheet (Silicon channel) ──
+    const ns = box(gateL, nsT, nsW, colNS);
+    ns.position.set(0, cy, 0);
+    root.add(ns);
+
+    // ── Inner Spacers ──
+    const ispH = nsT + hkThick * 2 + 0.04;
+    const ispT = 0.18;
+    const isp1 = box(ispT, ispH, nsW + 0.1, colInner);
+    isp1.position.set(gateL / 2 + ispT / 2, cy, 0);
+    root.add(isp1);
+    const isp2 = box(ispT, ispH, nsW + 0.1, colInner);
+    isp2.position.set(-gateL / 2 - ispT / 2, cy, 0);
+    root.add(isp2);
+
+    // ── Nanosheet extensions into S/D region ──
+    const nsSD1 = box(sdL - ispT, nsT, nsW, colNS);
+    nsSD1.position.set((gateL / 2 + ispT + sdL / 2), cy, 0);
+    root.add(nsSD1);
+    const nsSD2 = box(sdL - ispT, nsT, nsW, colNS);
+    nsSD2.position.set(-(gateL / 2 + ispT + sdL / 2), cy, 0);
+    root.add(nsSD2);
+  }
+
+  // ── Outer Gate Spacers ──
+  const topSheetY = baseY + (numSheets - 1) * sheetSpacing;
+  const spH = topSheetY - baseY + nsT + 0.3;
+  const spMidY = (baseY + topSheetY) / 2;
+  const spThick = 0.22;
+  const spW = nsW + 0.6;
+
+  const sp1 = box(spThick, spH, spW, colOuter);
+  sp1.position.set(gateL / 2 + 0.18 + spThick / 2, spMidY, 0);
+  root.add(sp1);
+  const sp2 = box(spThick, spH, spW, colOuter);
+  sp2.position.set(-gateL / 2 - 0.18 - spThick / 2, spMidY, 0);
+  root.add(sp2);
+
+  // ── Epitaxial Source/Drain ──
+  const sdH = spH + 0.2;
+  const sdXOff = gateL / 2 + 0.18 + spThick + sdL * 0.4;
+
+  [1, -1].forEach(side => {
+    const epi = box(sdL * 0.9, sdH * 0.9, nsW + 0.3, colSD);
+    epi.position.set(side * sdXOff, spMidY, 0);
+    root.add(epi);
+
+    const ild = box(sdL * 0.5, sdH * 0.5, nsW * 0.5, colILD);
+    ild.position.set(side * (sdXOff + sdL * 0.05), spMidY + sdH * 0.35, 0);
+    root.add(ild);
+  });
+
+  // Gate contact on top
+  const gateContact = box(gateL * 0.5, 0.35, nsW * 0.4, colILD);
+  gateContact.position.set(0, topSheetY + 0.7, 0);
+  root.add(gateContact);
+
+  // ── Labels ──
+  const midY = spMidY;
+  const yOff = midY; // root shifts down by midY
+
+  const labDefs = [
+    // Si Nanosheets — tip on mid nanosheet edge, badge right
+    { comp: C[0], tip: new THREE.Vector3(0, baseY + sheetSpacing, nsW/2),             label: new THREE.Vector3(0, baseY + sheetSpacing, nsW/2 + 3.5) },
+    // High-k dielectric — tip on HK top face of top sheet, badge upper-right
+    { comp: C[1], tip: new THREE.Vector3(0.3, topSheetY + nsT/2 + 0.06, nsW/2),       label: new THREE.Vector3(2.0, topSheetY + 2.0, nsW/2 + 2.5) },
+    // Metal Gate — tip on MG side face, badge upper-left
+    { comp: C[2], tip: new THREE.Vector3(0, topSheetY + nsT/2 + 0.18, -nsW/2 - 0.13), label: new THREE.Vector3(-2.0, topSheetY + 2.0, -(nsW/2 + 3.0)) },
+    // Inner Spacers — tip on spacer block, badge lower-right
+    { comp: C[3], tip: new THREE.Vector3(gateL/2 + 0.09, baseY, nsW/2),               label: new THREE.Vector3(3.5, baseY - 1.5, nsW/2 + 2.5) },
+    // Outer Gate Spacers — tip on outer spacer face, badge right
+    { comp: C[4], tip: new THREE.Vector3(gateL/2 + 0.18 + spThick, spMidY, -nsW/2),  label: new THREE.Vector3(3.5, spMidY + 1.5, -(nsW/2 + 3.0)) },
+    // Epi S/D — tip on epi block surface, badge far right
+    { comp: C[5], tip: new THREE.Vector3(sdXOff, spMidY, nsW/2 + 0.15),              label: new THREE.Vector3(sdXOff + 1.5, spMidY + 1.5, nsW/2 + 3.0) },
+    // STI oxide — tip on STI top face, badge left-back
+    { comp: C[6], tip: new THREE.Vector3(0, 0.72, -(nsW/2 + 0.3)),                   label: new THREE.Vector3(-2.0, 1.5, -(nsW/2 + 3.5)) },
+    // Substrate — tip on substrate surface, badge lower-left
+    { comp: C[7], tip: new THREE.Vector3(-1.0, -0.35, nsW/2 + 0.7),                  label: new THREE.Vector3(-3.0, -2.0, nsW/2 + 3.5) },
+    // ILD / Contact — tip on gate contact top, badge upper-center
+    { comp: C[8], tip: new THREE.Vector3(0, topSheetY + 0.7, 0),                     label: new THREE.Vector3(0, topSheetY + 2.8, 0) },
+  ];
+
+  labDefs.forEach(({ comp, tip, label }) => {
+    const tipW  = tip.clone().add(new THREE.Vector3(0, -yOff, 0));
+    const labW  = label.clone().add(new THREE.Vector3(0, -yOff, 0));
+    const lbl = createLabel(comp.id, comp.name, tipW, labW, comp.color, comp.id);
+    labelObjects.push(lbl);
+  });
+
+  root.position.set(0, -midY, 0);
+  currentModel = root;
+
+  orbit.theta = -Math.PI / 6;
+  orbit.phi = Math.PI / 2.8;
+  orbit.radius = 12;
+  orbit.target.set(0, 0, 0);
+}
+
+// ═══════════════════════════════════════════════
+// BUILD FINFET MODEL
+// ═══════════════════════════════════════════════
+
+function buildFinFET() {
+  clearScene(); clearLabels();
+  const root = new THREE.Group(); scene.add(root);
+  const C = MODELS.finfet.components;
+  const colFin=C[0].color, colHK=C[1].color, colMG=C[2].color, colSp=C[3].color;
+  const colSD=C[4].color,  colSTI=C[5].color, colSub=C[6].color, colILD=C[7].color;
+
+  // Dimensions
+  const finW=0.22, finH=1.2, finL=4.0;
+  const gateL=0.6, sdL=(finL-gateL)/2;
+  const hkT=0.06, mgT=0.14, spT=0.25;
+  const stiH=0.7; // STI height (fin protrudes above by finH-stiH)
+  const subH=0.6;
+  const finBaseY = subH + stiH;
+
+  // Substrate
+  const sub = box(finL+1.8, subH, 3.2, colSub);
+  sub.position.set(0, subH/2, 0); root.add(sub);
+
+  // STI oxide — two blocks flanking fin
+  [-1,1].forEach(side => {
+    const sti = box(finL+0.8, stiH, 1.1, colSTI);
+    sti.position.set(0, subH+stiH/2, side*0.85); root.add(sti);
+  });
+
+  // Silicon Fin
+  const fin = box(finL, finH, finW, colFin);
+  fin.position.set(0, subH+stiH+finH/2, 0); root.add(fin);
+
+  // HfO2 on three fin faces (top + two sides) within gate region
+  const hkTop = box(gateL, hkT, finW+hkT*2, colHK);
+  hkTop.position.set(0, subH+stiH+finH+hkT/2, 0); root.add(hkTop);
+  [-1,1].forEach(side => {
+    const hkSide = box(gateL, finH, hkT, colHK);
+    hkSide.position.set(0, subH+stiH+finH/2, side*(finW/2+hkT/2)); root.add(hkSide);
+  });
+
+  // Metal Gate wrapping
+  const mgTop = box(gateL, mgT, finW+hkT*2+mgT*2, colMG);
+  mgTop.position.set(0, subH+stiH+finH+hkT+mgT/2, 0); root.add(mgTop);
+  [-1,1].forEach(side => {
+    const mgSide = box(gateL, finH+hkT+mgT, mgT, colMG);
+    mgSide.position.set(0, subH+stiH+(finH+hkT+mgT)/2, side*(finW/2+hkT+mgT/2)); root.add(mgSide);
+  });
+  // Gate cap (front/back not needed for clarity — leave open so students see through)
+
+  // Gate spacers
+  [-1,1].forEach(side => {
+    const sp = box(spT, finH+hkT+mgT+0.1, finW+hkT*2+mgT*2+0.1, colSp);
+    sp.position.set(side*(gateL/2+spT/2), subH+stiH+(finH+hkT+mgT)/2, 0); root.add(sp);
+  });
+
+  // Raised epi S/D (merges on both sides)
+  [-1,1].forEach(side => {
+    const epi = box(sdL-spT, finH*0.9, finW*3.5, colSD);
+    epi.position.set(side*(gateL/2+spT+sdL/2), subH+stiH+finH*0.55, 0); root.add(epi);
+  });
+
+  // ILD
+  [-1,1].forEach(side => {
+    const ild = box((sdL-spT)*0.5, finH*0.5, finW*2, colILD);
+    ild.position.set(side*(gateL/2+spT+(sdL-spT)*0.75), subH+stiH+finH*0.9+0.2, 0); root.add(ild);
+  });
+  // Gate contact
+  const gcon = box(gateL*0.4, 0.3, finW, colILD);
+  gcon.position.set(0, subH+stiH+finH+hkT+mgT+0.25, 0); root.add(gcon);
+
+  const midY = subH+stiH+finH/2;
+  const off = midY;
+  const labDefs = [
+    { comp:C[0], tip:new THREE.Vector3(0,subH+stiH+finH/2,finW/2),            label:new THREE.Vector3(0,subH+stiH+finH/2,2.5) },
+    { comp:C[1], tip:new THREE.Vector3(0.1,subH+stiH+finH+hkT/2,finW/2+hkT), label:new THREE.Vector3(1.5,subH+stiH+finH+1.2,2.2) },
+    { comp:C[2], tip:new THREE.Vector3(0,subH+stiH+finH+hkT+mgT/2,-finW/2-hkT-mgT), label:new THREE.Vector3(-1.5,subH+stiH+finH+1.2,-2.5) },
+    { comp:C[3], tip:new THREE.Vector3(gateL/2+spT/2,subH+stiH+finH*0.7,0),  label:new THREE.Vector3(2.5,subH+stiH+finH+0.8,0) },
+    { comp:C[4], tip:new THREE.Vector3(gateL/2+spT+0.2,subH+stiH+finH*0.5,finW*1.5), label:new THREE.Vector3(3.0,subH+stiH+finH+0.5,2.5) },
+    { comp:C[5], tip:new THREE.Vector3(0,subH+stiH*0.5,0.85),                 label:new THREE.Vector3(0,subH+stiH*0.5,3.2) },
+    { comp:C[6], tip:new THREE.Vector3(-1.0,subH/2,1.2),                      label:new THREE.Vector3(-2.5,-0.3,3.0) },
+    { comp:C[7], tip:new THREE.Vector3(gateL/2+spT+0.1,subH+stiH+finH+0.25,0), label:new THREE.Vector3(3.0,subH+stiH+finH+1.5,-2.0) },
+  ];
+  labDefs.forEach(({comp,tip,label}) => {
+    const lbl = createLabel(comp.id, comp.name, tip.clone().add(new THREE.Vector3(0,-off,0)), label.clone().add(new THREE.Vector3(0,-off,0)), comp.color, comp.id);
+    labelObjects.push(lbl);
+  });
+
+  root.position.set(0, -off, 0);
+  currentModel = root;
+  orbit.theta = Math.PI/5; orbit.phi = Math.PI/3; orbit.radius = 11; orbit.target.set(0,0,0);
+}
+
+// ═══════════════════════════════════════════════
+// BUILD PLANAR MOSFET MODEL
+// ═══════════════════════════════════════════════
+
+function buildPlanar() {
+  clearScene(); clearLabels();
+  const root = new THREE.Group(); scene.add(root);
+  const C = MODELS.planar.components;
+  const colPoly=C[0].color, colOx=C[1].color, colSrc=C[2].color, colDrn=C[3].color;
+  const colBody=C[4].color, colFox=C[5].color, colSub=C[6].color, colMet=C[7].color, colSp=C[8].color;
+
+  const W=5.0, D=3.0; // device width/depth
+  const subH=0.8, subY=subH/2;
+  const foxH=0.35, foxW=1.0; // field oxide height & width each side
+  const chL=1.4; // channel length
+  const sdL=(W-chL)/2-foxW; // S/D length
+  const oxT=0.08; // gate oxide thickness
+  const polyH=0.4, polyW=chL;
+  const spT=0.18; // spacer thickness
+  const sdH=0.3; // S/D implant depth
+  const metH=0.28;
+
+  // Substrate
+  const sub = box(W+0.6, subH, D, colSub);
+  sub.position.set(0, subY, 0); root.add(sub);
+
+  // Body/channel region (p-Si top layer)
+  const body = box(chL, sdH, D, colBody);
+  body.position.set(0, subH+sdH/2, 0); root.add(body);
+
+  // Field oxide both sides
+  [-1,1].forEach(side => {
+    const fox = box(foxW, foxH, D, colFox);
+    fox.position.set(side*(chL/2+sdL/2+foxW/2+spT), subH+foxH/2, 0); root.add(fox);
+  });
+
+  // n+ Source & Drain
+  [[-1,colSrc],[1,colDrn]].forEach(([side,col]) => {
+    const sd = box(sdL, sdH, D, col);
+    sd.position.set(side*(chL/2+spT+sdL/2), subH+sdH/2, 0); root.add(sd);
+  });
+
+  // Gate oxide
+  const gox = box(chL, oxT, D, colOx);
+  gox.position.set(0, subH+sdH+oxT/2, 0); root.add(gox);
+
+  // Sidewall spacers
+  [-1,1].forEach(side => {
+    const sp = box(spT, polyH+oxT, D, colSp);
+    sp.position.set(side*(chL/2+spT/2), subH+sdH+oxT+polyH/2, 0); root.add(sp);
+  });
+
+  // Polysilicon gate
+  const poly = box(polyW, polyH, D, colPoly);
+  poly.position.set(0, subH+sdH+oxT+polyH/2, 0); root.add(poly);
+
+  // ILD (thin layer over everything)
+  const ild = box(W, 0.25, D, '#4a5568');
+  ild.position.set(0, subH+sdH+oxT+polyH+0.125, 0); root.add(ild);
+
+  // Metal contacts
+  [[-1,'S'],[0,'G'],[1,'D']].forEach(([side]) => {
+    const xOff = side===0 ? 0 : side*(chL/2+spT+sdL/2);
+    const yBot = side===0 ? subH+sdH+oxT+polyH : subH+sdH;
+    const met = box(0.25, metH+0.15, 0.5, colMet);
+    met.position.set(xOff, yBot+metH/2+0.05, 0); root.add(met);
+    // metal bar on top
+    const bar = box(sdL*0.8, 0.1, D*0.4, colMet);
+    bar.position.set(xOff, yBot+metH+0.15, 0); root.add(bar);
+  });
+
+  const midY = subH/2;
+  const off = midY;
+  const labDefs = [
+    { comp:C[0], tip:new THREE.Vector3(0,subH+sdH+oxT+polyH/2,D/2),           label:new THREE.Vector3(0,subH+sdH+oxT+polyH+1.5,D/2+2.0) },
+    { comp:C[1], tip:new THREE.Vector3(0,subH+sdH+oxT/2,D/2),                 label:new THREE.Vector3(-1.0,subH+sdH+1.2,D/2+2.0) },
+    { comp:C[2], tip:new THREE.Vector3(-(chL/2+spT+sdL/2),subH+sdH*0.5,D/2), label:new THREE.Vector3(-3.5,subH+1.2,D/2+2.0) },
+    { comp:C[3], tip:new THREE.Vector3( (chL/2+spT+sdL/2),subH+sdH*0.5,D/2), label:new THREE.Vector3( 3.5,subH+1.2,D/2+2.0) },
+    { comp:C[4], tip:new THREE.Vector3(0,subH+sdH/2,D/2),                     label:new THREE.Vector3(0,subH-0.5,D/2+2.5) },
+    { comp:C[5], tip:new THREE.Vector3(chL/2+spT+sdL/2+foxW/2,subH+foxH/2,D/2), label:new THREE.Vector3(3.8,subH+foxH+1.0,D/2+2.0) },
+    { comp:C[6], tip:new THREE.Vector3(1.5,subY,D/2),                         label:new THREE.Vector3(3.0,-0.5,D/2+2.5) },
+    { comp:C[7], tip:new THREE.Vector3(0,subH+sdH+oxT+polyH+metH/2,0),        label:new THREE.Vector3(-2.0,subH+sdH+oxT+polyH+1.5,-D/2-2.0) },
+    { comp:C[8], tip:new THREE.Vector3(chL/2+spT/2,subH+sdH+oxT+polyH/2,D/2), label:new THREE.Vector3(2.0,subH+sdH+oxT+polyH+1.2,D/2+2.0) },
+  ];
+  labDefs.forEach(({comp,tip,label}) => {
+    const lbl = createLabel(comp.id, comp.name, tip.clone().add(new THREE.Vector3(0,-off,0)), label.clone().add(new THREE.Vector3(0,-off,0)), comp.color, comp.id);
+    labelObjects.push(lbl);
+  });
+
+  root.position.set(0, -off, 0);
+  currentModel = root;
+  orbit.theta = -Math.PI/6; orbit.phi = Math.PI/3; orbit.radius = 12; orbit.target.set(0,0,0);
+}
+
+// ═══════════════════════════════════════════════
+// BUILD TSV 3D IC STACK MODEL
+// ═══════════════════════════════════════════════
+
+function buildTSV() {
+  clearScene(); clearLabels();
+  const root = new THREE.Group(); scene.add(root);
+  const C = MODELS.tsv.components;
+  const colSi=C[0].color, colCu=C[1].color, colOxL=C[2].color, colBar=C[3].color;
+  const colBump=C[4].color, colBEOL=C[5].color, colBond=C[6].color, colILD=C[7].color;
+  const colSub=C[8].color, colPad=C[9].color;
+
+  const dieW=5.0, dieD=3.5, dieH=0.9;
+  const numDies=3;
+  const bondH=0.15, bumpH=0.2;
+  const beolH=0.2;
+  const tsvR=0.18, oxlR=0.24, barR=0.27;
+  const tsvXs=[-1.2, 0, 1.2], tsvZ=0;
+  const subH=0.5;
+
+  // Bottom substrate/interposer
+  const sub = box(dieW+0.8, subH, dieD+0.6, colSub);
+  sub.position.set(0, subH/2, 0); root.add(sub);
+
+  let baseY = subH;
+
+  for (let d=0; d<numDies; d++) {
+    const dY = baseY;
+
+    // Bonding layer (except below die 0)
+    if (d > 0) {
+      const bond = box(dieW, bondH, dieD, colBond);
+      bond.position.set(0, dY+bondH/2, 0); root.add(bond);
+      baseY += bondH;
+    }
+
+    // Microbumps on bottom of die (except die 0)
+    if (d > 0) {
+      tsvXs.forEach(tx => {
+        const bump = cylinder(0.12, 0.12, bumpH, 8, colBump);
+        bump.position.set(tx, baseY+bumpH/2, tsvZ); root.add(bump);
+        // Landing pad below bump
+        const padB = box(0.35, 0.07, 0.35, colPad);
+        padB.position.set(tx, baseY-0.035, tsvZ); root.add(padB);
+      });
+      baseY += bumpH;
+    }
+
+    // Si die body
+    const die = box(dieW, dieH, dieD, colSi);
+    die.position.set(0, baseY+dieH/2, 0); root.add(die);
+
+    // BEOL metal on top of die
+    const beol = box(dieW, beolH, dieD, colBEOL);
+    beol.position.set(0, baseY+dieH+beolH/2, 0); root.add(beol);
+
+    // ILD within BEOL
+    const ild = box(dieW*0.6, beolH*0.6, dieD*0.6, colILD);
+    ild.position.set(0.3, baseY+dieH+beolH*0.3, 0); root.add(ild);
+
+    // TSVs through this die
+    tsvXs.forEach(tx => {
+      // Oxide liner
+      const oxl = cylinder(oxlR, oxlR, dieH, 16, colOxL);
+      oxl.position.set(tx, baseY+dieH/2, tsvZ); root.add(oxl);
+      // Barrier
+      const bar = cylinder(barR*0.88, barR*0.88, dieH, 16, colBar);
+      bar.position.set(tx, baseY+dieH/2, tsvZ); root.add(bar);
+      // Cu fill
+      const cu = cylinder(tsvR, tsvR, dieH, 16, colCu);
+      cu.position.set(tx, baseY+dieH/2, tsvZ); root.add(cu);
+      // Landing pad on top
+      const pad = box(0.38, 0.07, 0.38, colPad);
+      pad.position.set(tx, baseY+dieH+0.035, tsvZ); root.add(pad);
+    });
+
+    baseY += dieH + beolH;
+  }
+
+  const totalH = baseY;
+  const off = totalH/2;
+
+  // Labels — place relative to actual world positions, then shift by -off
+  const die1BaseY = subH;
+  const die2BaseY = subH + bondH + bumpH + dieH + beolH + bondH + bumpH;
+  const midDie1 = die1BaseY + dieH/2;
+  const midDie2 = die2BaseY + dieH/2;
+
+  const labDefs = [
+    { comp:C[0], tip:new THREE.Vector3( dieW/2, midDie1, 0),                   label:new THREE.Vector3( dieW/2+2.5, midDie1+0.5, dieD/2+1.5) },
+    { comp:C[1], tip:new THREE.Vector3( tsvXs[1], midDie1, tsvZ),              label:new THREE.Vector3( tsvXs[1]+1.5, midDie1+1.5, dieD/2+2.5) },
+    { comp:C[2], tip:new THREE.Vector3( tsvXs[0], midDie1, tsvZ+oxlR),        label:new THREE.Vector3( tsvXs[0]-2.0, midDie1+0.5, dieD/2+2.5) },
+    { comp:C[3], tip:new THREE.Vector3( tsvXs[0], midDie1, tsvZ+barR),        label:new THREE.Vector3( tsvXs[0]-2.5, midDie1-0.5, dieD/2+2.5) },
+    { comp:C[4], tip:new THREE.Vector3( tsvXs[2], die2BaseY-bumpH/2, tsvZ),   label:new THREE.Vector3( tsvXs[2]+2.5, die2BaseY-1.0, dieD/2+2.5) },
+    { comp:C[5], tip:new THREE.Vector3( 0.3, die1BaseY+dieH+beolH*0.5, 0),    label:new THREE.Vector3( 3.0, die1BaseY+dieH+1.5, dieD/2+2.0) },
+    { comp:C[6], tip:new THREE.Vector3( -dieW/2+0.5, die2BaseY-bondH/2, 0),   label:new THREE.Vector3(-3.5, die2BaseY-1.2, dieD/2+2.0) },
+    { comp:C[7], tip:new THREE.Vector3( 0.3, die1BaseY+dieH+beolH*0.3, 0),    label:new THREE.Vector3(-2.5, die1BaseY+dieH+1.0, dieD/2+2.5) },
+    { comp:C[8], tip:new THREE.Vector3( dieW/2, subH/2, dieD/2),              label:new THREE.Vector3( dieW/2+2.5, -0.5, dieD/2+2.0) },
+    { comp:C[9], tip:new THREE.Vector3( tsvXs[2], die1BaseY+dieH+0.07, tsvZ), label:new THREE.Vector3( tsvXs[2]+2.5, die1BaseY+dieH+1.8, -dieD/2-2.0) },
+  ];
+  labDefs.forEach(({comp,tip,label}) => {
+    const lbl = createLabel(comp.id, comp.name, tip.clone().add(new THREE.Vector3(0,-off,0)), label.clone().add(new THREE.Vector3(0,-off,0)), comp.color, comp.id);
+    labelObjects.push(lbl);
+  });
+
+  root.position.set(0, -off, 0);
+  currentModel = root;
+  orbit.theta = Math.PI/5; orbit.phi = Math.PI/3.2; orbit.radius = 16; orbit.target.set(0,0,0);
+}
+
+// ═══════════════════════════════════════════════
+// BUILD DRAM CELL MODEL (2×2 array, deep trench)
+// ═══════════════════════════════════════════════
+
+function buildDRAM() {
+  clearScene(); clearLabels();
+  const root = new THREE.Group(); scene.add(root);
+  const C = MODELS.dram.components;
+  const colSub   = C[0].color;
+  const colDT    = C[1].color;
+  const colBP    = C[2].color;
+  const colND    = C[3].color;
+  const colPoly  = C[4].color;
+  const colColl  = C[5].color;
+  const colStrap = C[6].color;
+  const colSTI   = C[7].color;
+  const colFET   = C[8].color;
+  const colWL    = C[9].color;
+  const colBL    = C[10].color;
+
+  // Dimensions — scaled for visibility
+  const cellPitch = 2.2;          // cell-to-cell pitch
+  const subW = cellPitch * 2 + 0.8;
+  const subD = cellPitch * 2 + 0.8;
+  const subH = 5.5;               // substrate height (trench goes ~4.5 deep)
+  const trenchR = 0.38;           // trench radius
+  const trenchH = 4.5;            // total trench depth
+  const bpFrac  = 0.6;            // fraction of trench that is buried plate zone
+  const bpH     = trenchH * bpFrac;
+  const collarH = 1.2;            // collar height
+  const collarTop = subH - 1.0;  // collar top Y (relative to substrate bottom)
+  const stiH    = 0.45;
+  const fetH    = 0.35;
+  const wlH     = 0.22, wlT = 0.28;
+  const blH     = 0.15, blT = 0.12;
+
+  // Cell positions (2×2 grid)
+  const cellPos = [
+    [-cellPitch/2, -cellPitch/2],
+    [ cellPitch/2, -cellPitch/2],
+    [-cellPitch/2,  cellPitch/2],
+    [ cellPitch/2,  cellPitch/2],
+  ];
+
+  // ── Substrate block ──
+  const sub = box(subW, subH, subD, colSub);
+  sub.position.set(0, subH / 2, 0);
+  root.add(sub);
+
+  cellPos.forEach(([cx, cz], idx) => {
+    const trenchBotY = subH - trenchH;
+    const trenchMidY = trenchBotY + trenchH / 2;
+    const bpBotY     = trenchBotY;
+    const bpMidY     = bpBotY + bpH / 2;
+    const ndMidY     = bpBotY + bpH / 2;         // node dielectric same zone as BP
+    const nodeMidY   = bpBotY + bpH / 2;
+    const collarMidY = trenchBotY + bpH + collarH / 2;
+    const strapY     = trenchBotY + bpH + collarH;
+    const stiMidY    = subH - stiH / 2;
+
+    // n⁺ Buried Plate (outer ring on lower trench wall — slightly wider cylinder)
+    const bp = cylinder(trenchR + 0.14, trenchR + 0.14, bpH, 20, colBP);
+    bp.position.set(cx, bpMidY, cz);
+    root.add(bp);
+
+    // Node Dielectric (thin ring around poly, inside BP zone)
+    const nd = cylinder(trenchR + 0.06, trenchR + 0.06, bpH, 20, colND);
+    nd.position.set(cx, bpMidY, cz);
+    root.add(nd);
+
+    // Poly Storage Node (inner fill of lower trench)
+    const polyNode = cylinder(trenchR - 0.04, trenchR - 0.04, bpH, 20, colPoly);
+    polyNode.position.set(cx, bpMidY, cz);
+    root.add(polyNode);
+
+    // Collar Oxide (upper trench, wider to show isolation)
+    const collar = cylinder(trenchR + 0.10, trenchR + 0.10, collarH, 20, colColl);
+    collar.position.set(cx, collarMidY, cz);
+    root.add(collar);
+
+    // Buried Strap (small poly block bridging trench top to transistor)
+    const strap = box(trenchR * 2 + 0.1, 0.22, 0.3, colStrap);
+    strap.position.set(cx, strapY + 0.11, cz + trenchR + 0.15);
+    root.add(strap);
+
+    // STI cap over trench top
+    const sti = box(trenchR * 2 + 0.55, stiH, trenchR * 2 + 0.55, colSTI);
+    sti.position.set(cx, stiMidY, cz);
+    root.add(sti);
+
+    // Access transistor body (nFET channel region above strap)
+    const fet = box(0.55, fetH, 0.65, colFET);
+    fet.position.set(cx + 0.55, subH - stiH - fetH / 2, cz);
+    root.add(fet);
+  });
+
+  // ── Word Lines (run in Z direction across row pairs) ──
+  [-cellPitch/2, cellPitch/2].forEach((cz, ri) => {
+    const wl = box(subW - 0.3, wlH, wlT, colWL);
+    wl.position.set(0, subH - stiH - fetH / 2, cz);
+    root.add(wl);
+  });
+
+  // ── Bit Lines (run in X direction across column pairs, on top) ──
+  [-cellPitch/2, cellPitch/2].forEach((cx, ci) => {
+    const bl = box(blT, blH, subD - 0.3, colBL);
+    bl.position.set(cx + 0.55, subH + blH / 2, 0);
+    root.add(bl);
+
+    // Bit line contacts (small pillars from FET drain to BL)
+    [-cellPitch/2, cellPitch/2].forEach(cz => {
+      const contact = cylinder(0.1, 0.1, blH + stiH * 0.5, 8, colBL);
+      contact.position.set(cx + 0.55, subH - fetH / 2, cz);
+      root.add(contact);
+    });
+  });
+
+  // ── Labels — tip ON structure, label offset outward ──
+  const off = subH / 2;
+  const c0z = -cellPitch / 2;
+  const c0x = -cellPitch / 2;
+  const bpBot = subH - trenchH;
+  const bpMid = bpBot + trenchH * bpFrac / 2;
+  const collarMid = bpBot + trenchH * bpFrac + 0.6;
+
+  const labDefs = [
+    // Substrate
+    { comp:C[0],  tip: new THREE.Vector3( subW/2, subH*0.3, subD/2),
+                  label: new THREE.Vector3( subW/2+2.5, subH*0.3, subD/2+3.0) },
+    // Deep Trench
+    { comp:C[1],  tip: new THREE.Vector3( c0x, bpMid, c0z),
+                  label: new THREE.Vector3( c0x-2.5, bpMid+1.5, c0z-3.0) },
+    // Buried Plate
+    { comp:C[2],  tip: new THREE.Vector3( c0x, bpMid, c0z + trenchR+0.14),
+                  label: new THREE.Vector3( c0x-3.0, bpMid, c0z+3.5) },
+    // Node Dielectric
+    { comp:C[3],  tip: new THREE.Vector3( c0x, bpMid+0.5, c0z + trenchR+0.06),
+                  label: new THREE.Vector3( c0x+2.5, bpMid+1.5, c0z+3.5) },
+    // Poly Storage Node
+    { comp:C[4],  tip: new THREE.Vector3( c0x, bpMid-0.5, c0z),
+                  label: new THREE.Vector3( c0x+0.5, bpMid-2.0, c0z-3.5) },
+    // Collar Oxide
+    { comp:C[5],  tip: new THREE.Vector3( c0x, collarMid, c0z + trenchR+0.10),
+                  label: new THREE.Vector3( c0x-3.0, collarMid+1.0, c0z+3.0) },
+    // Buried Strap
+    { comp:C[6],  tip: new THREE.Vector3( c0x, subH - stiH - 0.3, c0z + trenchR+0.15),
+                  label: new THREE.Vector3( c0x-3.0, subH+0.5, c0z+3.0) },
+    // STI
+    { comp:C[7],  tip: new THREE.Vector3( cellPitch/2, subH - stiH/2, c0z),
+                  label: new THREE.Vector3( cellPitch/2+3.0, subH+0.5, c0z-3.0) },
+    // Access Transistor
+    { comp:C[8],  tip: new THREE.Vector3( c0x+0.55, subH - stiH - fetH/2, c0z),
+                  label: new THREE.Vector3( c0x+0.55+3.0, subH+0.5, c0z-3.0) },
+    // Word Line
+    { comp:C[9],  tip: new THREE.Vector3( subW/2-0.4, subH - stiH - fetH/2, -cellPitch/2),
+                  label: new THREE.Vector3( subW/2+2.5, subH+1.0, -cellPitch/2-2.5) },
+    // Bit Line
+    { comp:C[10], tip: new THREE.Vector3( c0x+0.55, subH + blH/2, 0),
+                  label: new THREE.Vector3( c0x+0.55-3.0, subH+2.0, 3.0) },
+  ];
+
+  labDefs.forEach(({ comp, tip, label }) => {
+    const tipW   = tip.clone().add(new THREE.Vector3(0, -off, 0));
+    const labelW = label.clone().add(new THREE.Vector3(0, -off, 0));
+    labelObjects.push(createLabel(comp.id, comp.name, tipW, labelW, comp.color, comp.id));
+  });
+
+  root.position.set(0, -off, 0);
+  currentModel = root;
+  orbit.theta = Math.PI / 5;
+  orbit.phi = Math.PI / 3;
+  orbit.radius = 16;
+  orbit.target.set(0, 0, 0);
+}
+
+// ═══════════════════════════════════════════════
+// SCENE MANAGEMENT
+// ═══════════════════════════════════════════════
+
+function clearScene() {
+  sceneMeshes = [];
+  while (scene.children.length > 0) {
+    const obj = scene.children[0];
+    if (obj.type === 'Mesh') { obj.geometry.dispose(); obj.material.dispose(); }
+    scene.remove(obj);
+  }
+  // Re-add lights
+  const ambient = new THREE.AmbientLight(0xffffff, 0.55); scene.add(ambient);
+  const dir1 = new THREE.DirectionalLight(0xffffff, 0.9); dir1.position.set(5,8,5); scene.add(dir1);
+  const dir2 = new THREE.DirectionalLight(0x6699ff, 0.4); dir2.position.set(-5,3,-5); scene.add(dir2);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(0,-5,5); scene.add(fill);
+}
+
+function buildLegend(modelKey) {
+  // Legend removed — no-op
+}
+
+// ═══════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════
+
+function openViewer(modelKey) {
+  activeModel = modelKey;
+  const m = MODELS[modelKey];
+
+  document.getElementById('landing').style.display = 'none';
+  const viewer = document.getElementById('viewer');
+  viewer.style.display = 'flex';
+
+  const titleEl = document.getElementById('viewer-title');
+  titleEl.textContent = m.title;
+  titleEl.className = 'viewer-title ' + modelKey;
+
+  buildLegend(modelKey);
+
+  // Reset xray state first
+  xrayMode = false;
+  const xbtn = document.getElementById('xray-btn');
+  if (xbtn) xbtn.classList.remove('active');
+
+  if (!renderer) { initThree(); animate(); }
+  else onResize();
+
+  m.build();
+
+  // Auto-enable xray for models where core mechanics are hidden by outer geometry
+  if (m.xrayDefault) {
+    // Defer one frame so meshes are registered before toggleXray reads sceneMeshes
+    requestAnimationFrame(() => {
+      toggleXray();
+      const xbtn = document.getElementById('xray-btn');
+      if (xbtn) xbtn.title = 'X-Ray is ON by default for this model — inner structures would be hidden otherwise';
+    });
+  } else {
+    const xbtn = document.getElementById('xray-btn');
+    if (xbtn) xbtn.title = 'Toggle X-Ray transparency to reveal inner layers';
+  }
+}
+
+function closeViewer() {
+  document.getElementById('viewer').style.display = 'none';
+  document.getElementById('landing').style.display = 'flex';
+  clearLabels();
+  activeModel = null;
+}
+
+// Init Three.js on first viewer open (lazy)
+</script>
+</body>
+</html>
